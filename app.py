@@ -33,7 +33,7 @@ class ASPP_Main:
         self.model = network.deeplabv3_resnet101(num_classes=2, output_stride=16)
         utils.set_bn_momentum(self.model.backbone, momentum=0.01)
 
-        if torch.cuda.is_avaliable():
+        if torch.cuda.is_available():
             self.device = torch.device('cuda')
             checkpoint = torch.load(args.checkpoint, map_location=torch.device('cuda'))
         else:
@@ -80,18 +80,19 @@ class cal_max_irr:
         with open(maxirr_path, 'r') as f:
             for line in f:
                 a = line.strip().split(' ')
-                self.maxirrs[datetime.datetime.strptime(a[0], '%H:%M:%S').time()] = float(a[1])
+                self.maxirrs[datetime.datetime.strptime(a[0], '%H:%M:%S')] = float(a[1])
 
     def cal(self, timestamp, args):
         timestamp_low = datetime.datetime.fromtimestamp(timestamp).time()
         timestamp_high = (datetime.datetime.fromtimestamp(timestamp)+datetime.timedelta(seconds=args.timeinterval)).time()
         for k, v in self.maxirrs.items():
-            if k > timestamp_low and k < timestamp_high:
+            if k.time() > timestamp_low and k.time() < timestamp_high:
                 return v
 
 def run(args):
     aspp = ASPP_Main(args)
-    maxirr = cal_max_irr(args.maxirr_path)
+    if args.include_solar:
+        maxirr = cal_max_irr(args.maxirr_path)
 
     with open_data_source(id=args.stream) as cap:
         timestamp, image = cap.get()
@@ -112,12 +113,9 @@ def run(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-stream', dest='stream',
-        action='store', default="camera",
-        help='ID or name of a stream, e.g. sample')
-    parser.add_argument('--maxirr-path', type=str, help='maxirr path')
-    parser.add_argument('--checkpoint', type=str, help='checkpoint path')
+    parser.add_argument('-stream', dest='stream', action='store', default="camera", help='ID or name of a stream, e.g. sample')
+    parser.add_argument('--maxirr-path', type=str, help='maxirr path, required to calculate solar irradiance')
+    parser.add_argument('--checkpoint', type=str, required=True, help='checkpoint path')
     parser.add_argument('--resize', type=int, default=300, help='resize image size')
 
     parser.add_argument('--include-solar', action='store_true', default=False, help="Publish solar irradiance")
@@ -125,6 +123,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--debug', dest='debug', action='store_true', default=False, help='Debug flag')
     args = parser.parse_args()
+
+    if args.include_solar and args.maxirr_path == None:
+        parser.print_help()
+        exit(1)
 
     if args.debug:
         print(f"Cloud cover estimation model loaded")
