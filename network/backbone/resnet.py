@@ -214,7 +214,7 @@ def _resnet(arch, block, layers, pretrained, progress, **kwargs):
     model = ResNet(block, layers, **kwargs)
     if pretrained:
         #state_dict = load_state_dict_from_url(model_urls[arch], progress=progress)
-        state_dict = torch.load('network/backbone/resnet101-5d3b4d8f.pth')
+        state_dict = torch.load('network/backbone/resnet101-base.pth')
         model.load_state_dict(state_dict)
     return model
 
