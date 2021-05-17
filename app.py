@@ -16,8 +16,8 @@ import glob
 import waggle.plugin as plugin
 from waggle.data import open_data_source
 
-TOPIC_INPUT_IMAGE = "sky_image"
 TOPIC_CLOUDCOVER = "env.coverage.cloud"
+TOPIC_SOLARCLOUD = "env.irradiance.cloud"
 
 plugin.init()
 
@@ -75,9 +75,9 @@ class ASPP_Main:
         return ratio
 
 class cal_max_irr:
-    def __init__(self):
+    def __init__(self, maxirr_path):
         self.maxirrs = {}
-        with open('maxirr_table_june.txt', 'r') as f:
+        with open(maxirr_path, 'r') as f:
             for line in f:
                 a = line.strip().split(' ')
                 self.maxirrs[datetime.datetime.strptime(a[0], '%H:%M:%S').time()] = float(a[1])
@@ -91,35 +91,37 @@ class cal_max_irr:
 
 def run(args):
     aspp = ASPP_Main(args)
-    maxirr = cal_max_irr()
+    maxirr = cal_max_irr(args.maxirr_path)
 
-    with open_data_source(id=TOPIC_INPUT_IMAGE) as cap:
+    with open_data_source(id=args.stream) as cap:
         timestamp, image = cap.get()
 
-        ratio = aspp.run(image):
+        ratio = aspp.run(image)
 
-        if args.result == 'cloudcover':
-            plugin.publish(TOPIC_CLOUDCOVER, ratio, timestamp=timestamp)
-            if args.debug:
-                print(f"Cloud coverage: {ratio}")
-                print(f"Measures published")
+        plugin.publish(TOPIC_CLOUDCOVER, ratio, timestamp=timestamp)
+        if args.debug:
+            print(f"Measures published: Cloud coverage = {ratio}")
 
-        elif args.result == 'solarpower':
+        if args.include_solar:
             current_max_irr = maxirr.cal(timestamp, args)
             irr = (1-ratio) * current_max_irr
-            plugin.publish(TOPIC_CLOUDCOVER, ratio, irr, timestamp=timestamp)
+            plugin.publish(TOPIC_SOLARCLOUD, irr, timestamp=timestamp)
             if args.debug:
-                print(f"Cloud coverage: {ratio}, {irr}")
-                print(f"Measures published")
+                print(f"Measures published: Solar irradiance = {irr}")
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-stream', dest='stream',
+        action='store', default="camera",
+        help='ID or name of a stream, e.g. sample')
+    parser.add_argument('--maxirr-path', type=str, help='maxirr path')
     parser.add_argument('--checkpoint', type=str, help='checkpoint path')
     parser.add_argument('--resize', type=int, default=300, help='resize image size')
 
-    parser.add.argument('--result', type=str, choices=['cloudcover', 'solarpower'])
-    parser.add.argument('--timeinterval', type=int, default=15, help='time interval between each estimation in seconds')
+    parser.add_argument('--include-solar', action='store_true', default=False, help="Publish solar irradiance")
+    parser.add_argument('--timeinterval', type=int, default=15, help='time interval between each estimation in seconds')
 
     parser.add_argument('--debug', dest='debug', action='store_true', default=False, help='Debug flag')
     args = parser.parse_args()
@@ -128,5 +130,3 @@ if __name__ == '__main__':
         print(f"Cloud cover estimation model loaded")
 
     run(args)
-
-
